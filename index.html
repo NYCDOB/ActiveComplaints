@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<head>
+    <title>Complaint Backlog</title>
+    <link rel="stylesheet" href="style2.css" type="text/css" media="screen" />
+	<link href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.3/leaflet.css' rel='stylesheet' type='text/css'/>
+		<style>
+
+			.floor {
+				  fill: #d6d6d6;
+			}
+
+			.dropdown{
+				position: absolute;
+				padding-top: 10px;
+				padding-left: 15px;
+			}
+		</style>
+		
+		
+		
+	
+</head>
+
+
+<div id="main-wrapper">
+    
+<div id="metrics">
+    <div id="motor">
+        <h2 style="margin-top:5px; margin-left:15px; font-size:18px;"><span id="code"></span> COMPLAINTS BACKLOG</h2>
+		<h2 style="font-size:16px; margin-left:15px; font-style: italic;">AVERAGE AGE (WORKDAYS)</h2><br/>
+		<h3 style="font-size:14px; margin-left:15px;">CITYWIDE AVERAGE: <font color="#e21d1d"><span id="citiAvg"></span></font> WORKDAYS</h3>
+		<h3 style="font-size:14px; margin-left:15px;">CD<font color="#e21d1d"><span id="maxCD"></span></font> HAS THE HIGHEST AVERAGE AGE (<font color="#e21d1d"><span id="maxAvg"></span></font>) </h3>
+		<h3 style="font-size:14px; margin-left:15px;">DATA UPDATED ON <font color="#e21d1d"><span id="today"></span></font></h3><br/><br/><br/><br/><br/>
+		<h3 style="font-size:14px; margin-left:15px;">PRIORITY CODE:</h3>
+		<div class="dropdown" style="z-index: 401">
+			<select id="priorCode" style="height: auto;max-height: 50px; overflow-x: hidden;">
+				<option value="b">B COMPLAINTS</option>
+				<option value="c">C COMPLAINTS</option>
+				<option value="d">D COMPLAINTS</option>
+			</select>
+		</div>		
+    </div>
+</div><!-- @end #metrics -->    
+		
+
+<div id="tooltip" class="tooltip">
+    <h3 class="name"></h3>
+	    <div data-metric="AvgAge" class="line">
+			Average Age:
+			<div class="AvgAge_val val"></div>
+		</div>
+		<div data-metric="ComplaintCount" class="line">
+			# Open Complaints:
+			<div class="ComplaintCount_val val"></div>
+		</div>
+</div>   
+   
+<script src="https://d3js.org/d3.v3.min.js"></script>
+<script src="https://d3js.org/queue.v1.min.js"></script>
+<script src="https://d3js.org/topojson.v1.min.js"></script>
+<script src="https://d3js.org/d3-format.v1.min.js"></script>
+<script src='https://code.jquery.com/jquery-3.3.1.js'></script>
+
+<script>
+var width = 1064,
+    height = 768,
+    center = [width / 2, height / 2],
+    defaultFill = "#E1E1E1",
+	legend_width = 200,
+	divisions = 100;
+
+var commuteById = d3.map();
+var projection = d3.geo.mercator()
+    .scale(75000)
+	.center( [-73.85,40.71] )
+    .translate([width / 2, height / 2]);
+	
+var path = d3.geo.path()
+    .projection(projection);
+
+var svg = d3.select("body #main-wrapper").append("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("g");
+		
+svg.on("wheel.zoom", null);
+svg.on("mousewheel.zoom", null);
+svg.append("rect")
+    .attr("class", "overlay")
+    .attr("width", width)
+    .attr("height", height);
+svg.append("svg:image")
+    .attr("xlink:href", "images/progress-anim.gif")
+    .attr("id", "progress-image")
+    .attr("width", 43)
+    .attr("height", 11)
+    .attr("x", width / 2)
+    .attr("y", height / 2);
+    
+var g = svg.append("g");
+    
+var tooltip = d3.select("#tooltip")
+ .attr("class", "tooltip")
+ .style("opacity", 0);
+var CURR_SELECT = ["AvgAge"];
+var COMP_CNT = ["ComplaintCount"];
+
+$('#priorCode').change(function() {
+	codeValue = $('#priorCode').val();
+	console.log(codeValue);
+	if (codeValue == "b"){
+		select_b();
+	} else if (codeValue == "c"){
+		select_c();
+	} else if (codeValue == "d"){
+		select_d();
+	}
+});
+onload = select_b();
+function select_b() {
+queue()
+    .defer(d3.json, "data/CD_topoJSON.json")
+	.defer(d3.json, "data/CD_toJoin_topoJSON.json")
+	.defer(d3.csv, "data/ActiveB_AvgAgeCD.csv")
+    .await(ready_B);
+	function ready_B(error, CD_topoJSON, CD_toJoin_topoJSON, data) {
+
+		data.forEach(function(d) {
+			d.AvgAge = +d.AvgAge;
+			d.ComplaintCount = +d.ComplaintCount;
+			d.CD = +d.CD;
+			commuteById.set(d.FIPS, d);
+		});
+		var citiAvg = d3.mean(data, function(d) {
+			return d.AvgAge;
+		});
+		var minAvg = d3.min(data, function(d) {
+			return d.AvgAge;
+		});
+		var maxAvg = d3.max(data, function(d) { 
+			return d.AvgAge; 
+		});
+		var maxCD = data.filter (function(d) {
+			if (d.AvgAge == maxAvg) {
+				return d.AvgAge;
+			}
+		})[0].CD;
+		
+		var today = new Date();
+		var dd = today.getDate();
+		var mm = today.getMonth()+1;
+		var yyyy = today.getFullYear();
+		today = mm + '/' + dd + '/' + yyyy;
+		
+		d3.select("#code").html("B");
+		d3.select("#citiAvg").html(d3.format(".1f")(citiAvg));
+		d3.select("#maxAvg").html(maxAvg);
+		d3.select("#maxCD").html(maxCD);
+		d3.select("#today").html(today);
+		
+		g.selectAll(".floor")
+				.data(topojson.feature(CD_topoJSON, CD_topoJSON.objects.collection).features)
+			.enter()
+				.append("path")
+				.attr("class","floor")
+				.attr("d", path);
+		g.append("g")
+			.attr("class", "collection")
+			.selectAll("path")
+			  .data(topojson.feature(CD_toJoin_topoJSON, CD_toJoin_topoJSON.objects.collection).features)
+			.enter().append("path")
+			  .attr("d", path)
+			  
+			  .on("mouseover", function(d) {
+				   d3.select(this.parentNode.appendChild(this)).classed("selected", true);
+				   tooltip.transition().duration(100)
+					 .style("opacity", 1)
+				   if (d3.event.pageX > (width - 200)) {
+					   tooltip.style("left", (d3.event.pageX - 210) + "px");
+				   } else {
+					   tooltip.style("left", (d3.event.pageX + 20) + "px")
+							.style("top", (d3.event.pageY -30) + "px");
+				   }
+				   if (d3.event.pageY > (height - 150)) {
+					   tooltip.style("top", (d3.event.pageY -140) + "px");
+				   } else {
+					   tooltip.style("top", (d3.event.pageY -30) + "px");
+				   }
+					tooltip.select(".name").text(commuteById.get(d.id)['name']);
+					tooltip.select(".AvgAge_val.val").text(commuteById.get(d.id)["AvgAge"])
+					tooltip.select(".ComplaintCount_val.val").text(commuteById.get(d.id)["ComplaintCount"])
+	 
+				 })
+			  .on("mouseout", function() {
+				  d3.select(this).classed("selected", false);
+				  tooltip.transition().duration(300)
+					.style("opacity", 0);
+				  });
+		
+		var color = d3.scale.linear()
+			.domain([minAvg, maxAvg])
+			.range(["#D3E5E8", "#2E648C"])
+			.interpolate(d3.interpolateLab);
+			
+		svg.selectAll(".collection path")
+			.attr("fill", function(d) {return color(commuteById.get(d.id)[CURR_SELECT[0]]); });
+
+	}
+}
+
+function select_c() {
+queue()
+    .defer(d3.json, "data/CD_topoJSON.json")
+	.defer(d3.json, "data/CD_toJoin_topoJSON.json")
+	.defer(d3.csv, "data/ActiveC_AvgAgeCD.csv")
+    .await(ready_B);
+	function ready_B(error, CD_topoJSON, CD_toJoin_topoJSON, data) {
+
+		data.forEach(function(d) {
+			d.AvgAge = +d.AvgAge;
+			d.ComplaintCount = +d.ComplaintCount;
+			d.CD = +d.CD;
+			commuteById.set(d.FIPS, d);
+		});
+		var citiAvg = d3.mean(data, function(d) {
+			return d.AvgAge;
+		});
+		var minAvg = d3.min(data, function(d) {
+			return d.AvgAge;
+		});
+		var maxAvg = d3.max(data, function(d) { 
+			return d.AvgAge; 
+		});
+		var maxCD = data.filter (function(d) {
+			if (d.AvgAge == maxAvg) {
+				return d.AvgAge;
+			}
+		})[0].CD;
+		
+		var today = new Date();
+		var dd = today.getDate();
+		var mm = today.getMonth()+1;
+		var yyyy = today.getFullYear();
+		today = mm + '/' + dd + '/' + yyyy;
+		
+		d3.select("#code").html("C");
+		d3.select("#citiAvg").html(d3.format(".1f")(citiAvg));
+		d3.select("#maxAvg").html(maxAvg);
+		d3.select("#maxCD").html(maxCD);
+		d3.select("#today").html(today);
+		
+		g.selectAll(".floor")
+				.data(topojson.feature(CD_topoJSON, CD_topoJSON.objects.collection).features)
+			.enter()
+				.append("path")
+				.attr("class","floor")
+				.attr("d", path);
+		g.append("g")
+			.attr("class", "collection")
+			.selectAll("path")
+			  .data(topojson.feature(CD_toJoin_topoJSON, CD_toJoin_topoJSON.objects.collection).features)
+			.enter().append("path")
+			  .attr("d", path)
+			  
+			  .on("mouseover", function(d) {
+				   d3.select(this.parentNode.appendChild(this)).classed("selected", true);
+				   tooltip.transition().duration(100)
+					 .style("opacity", 1)
+				   if (d3.event.pageX > (width - 200)) {
+					   tooltip.style("left", (d3.event.pageX - 210) + "px");
+				   } else {
+					   tooltip.style("left", (d3.event.pageX + 20) + "px")
+							.style("top", (d3.event.pageY -30) + "px");
+				   }
+				   if (d3.event.pageY > (height - 150)) {
+					   tooltip.style("top", (d3.event.pageY -140) + "px");
+				   } else {
+					   tooltip.style("top", (d3.event.pageY -30) + "px");
+				   }
+					tooltip.select(".name").text(commuteById.get(d.id)['name']);
+					tooltip.select(".AvgAge_val.val").text(commuteById.get(d.id)["AvgAge"])
+					tooltip.select(".ComplaintCount_val.val").text(commuteById.get(d.id)["ComplaintCount"])
+	 
+				 })
+			  .on("mouseout", function() {
+				  d3.select(this).classed("selected", false);
+				  tooltip.transition().duration(300)
+					.style("opacity", 0);
+				  });
+		
+		var color = d3.scale.linear()
+			.domain([minAvg, maxAvg])
+			.range(["#D3E5E8", "#2E648C"])
+			.interpolate(d3.interpolateLab);
+			
+		svg.selectAll(".collection path")
+			.attr("fill", function(d) {return color(commuteById.get(d.id)[CURR_SELECT[0]]); });
+
+	}
+}
+
+function select_d() {
+queue()
+    .defer(d3.json, "data/CD_topoJSON.json")
+	.defer(d3.json, "data/CD_toJoin_topoJSON.json")
+	.defer(d3.csv, "data/ActiveD_AvgAgeCD.csv")
+    .await(ready_B);
+	function ready_B(error, CD_topoJSON, CD_toJoin_topoJSON, data) {
+
+		data.forEach(function(d) {
+			d.AvgAge = +d.AvgAge;
+			d.ComplaintCount = +d.ComplaintCount;
+			d.CD = +d.CD;
+			commuteById.set(d.FIPS, d);
+		});
+		var citiAvg = d3.mean(data, function(d) {
+			return d.AvgAge;
+		});
+		var minAvg = d3.min(data, function(d) {
+			return d.AvgAge;
+		});
+		var maxAvg = d3.max(data, function(d) { 
+			return d.AvgAge; 
+		});
+		var maxCD = data.filter (function(d) {
+			if (d.AvgAge == maxAvg) {
+				return d.AvgAge;
+			}
+		})[0].CD;
+		
+		var today = new Date();
+		var dd = today.getDate();
+		var mm = today.getMonth()+1;
+		var yyyy = today.getFullYear();
+		today = mm + '/' + dd + '/' + yyyy;
+		
+		d3.select("#code").html("D");
+		d3.select("#citiAvg").html(d3.format(".1f")(citiAvg));
+		d3.select("#maxAvg").html(maxAvg);
+		d3.select("#maxCD").html(maxCD);
+		d3.select("#today").html(today);
+		
+		g.selectAll(".floor")
+				.data(topojson.feature(CD_topoJSON, CD_topoJSON.objects.collection).features)
+			.enter()
+				.append("path")
+				.attr("class","floor")
+				.attr("d", path);
+		g.append("g")
+			.attr("class", "collection")
+			.selectAll("path")
+			  .data(topojson.feature(CD_toJoin_topoJSON, CD_toJoin_topoJSON.objects.collection).features)
+			.enter().append("path")
+			  .attr("d", path)
+			  
+			  .on("mouseover", function(d) {
+				   d3.select(this.parentNode.appendChild(this)).classed("selected", true);
+				   tooltip.transition().duration(100)
+					 .style("opacity", 1)
+				   if (d3.event.pageX > (width - 200)) {
+					   tooltip.style("left", (d3.event.pageX - 210) + "px");
+				   } else {
+					   tooltip.style("left", (d3.event.pageX + 20) + "px")
+							.style("top", (d3.event.pageY -30) + "px");
+				   }
+				   if (d3.event.pageY > (height - 150)) {
+					   tooltip.style("top", (d3.event.pageY -140) + "px");
+				   } else {
+					   tooltip.style("top", (d3.event.pageY -30) + "px");
+				   }
+					tooltip.select(".name").text(commuteById.get(d.id)['name']);
+					tooltip.select(".AvgAge_val.val").text(commuteById.get(d.id)["AvgAge"])
+					tooltip.select(".ComplaintCount_val.val").text(commuteById.get(d.id)["ComplaintCount"])
+	 
+				 })
+			  .on("mouseout", function() {
+				  d3.select(this).classed("selected", false);
+				  tooltip.transition().duration(300)
+					.style("opacity", 0);
+				  });
+		
+		var color = d3.scale.linear()
+			.domain([minAvg, maxAvg])
+			.range(["#D3E5E8", "#2E648C"])
+			.interpolate(d3.interpolateLab);
+			
+		svg.selectAll(".collection path")
+			.attr("fill", function(d) {return color(commuteById.get(d.id)[CURR_SELECT[0]]); });
+
+	}
+}
+	//LEGEND
+    var newData = [];
+    var sectionWidth = Math.floor(legend_width / divisions); 
+	var ls_w = 25, ls_h = 25;
+	var legend = svg.append("g")
+		.attr("class", "legend")
+		.attr("transform", "translate(16,140)")
+		.attr("x", 10)
+		.attr("y", function(d, i){return height - (i*ls_h) - (-1*ls_h);})
+		.attr("width", ls_w)
+		.attr("height", ls_h);
+	
+    for (var i=0; i < legend_width; i+= sectionWidth ) {
+        newData.push(i);
+    }
+
+	var col_range_low = "#D3E5E8",
+		col_range_high = "#2E648C";
+	
+    var colorScaleLin = d3.scale.linear()
+          .domain([0, newData.length-1])
+          .interpolate(d3.interpolateLab)
+          .range([col_range_low, col_range_high]);
+
+    legend.selectAll('rect')
+        .data(newData)
+        .enter()
+        .append('rect')
+            .attr("x", function(d) { return d; })
+            .attr("y", 10)
+            .attr("height", 20)
+            .attr("width", sectionWidth)
+            .attr('fill', function(d, i) { return colorScaleLin(i)});	
+			
+    legend.append("text").text("LOW").attr("transform","translate(0,0)").style("font-size", "10px").style("font-family", "Arial");
+    legend.append("text").text("HIGH").attr("transform","translate("+(legend_width-25)+",0)").style("font-size", "10px").style("font-family", "Arial");
+
+	d3.select(self.frameElement).style("height", height + "px");
+
+    svg.select("#progress-image").remove();
+//}
+</script>
